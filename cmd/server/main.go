@@ -32,6 +32,6 @@ func main() {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
 	if <-signalChan != nil {
-		fmt.Println("\nClosing RabbitMQ connection.")
+		fmt.Println("\nShutting down Peril server.")
 	}
 }
