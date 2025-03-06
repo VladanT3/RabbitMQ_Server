@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -33,9 +32,36 @@ func main() {
 		log.Fatal("Couldn't declare and bind queue: ", err)
 	}
 
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
-	if <-signalChan != nil {
-		fmt.Println("\nClosing Peril client.")
+	game_state := gamelogic.NewGameState(username)
+
+	for {
+		fmt.Println()
+		input := gamelogic.GetInput()
+		if input == nil || len(input) == 0 {
+			continue
+		}
+		if input[0] == "spawn" {
+			err := game_state.CommandSpawn(input)
+			if err != nil {
+				fmt.Println(err)
+			}
+		} else if input[0] == "move" {
+			_, err := game_state.CommandMove(input)
+			if err != nil {
+				fmt.Println(err)
+			}
+		} else if input[0] == "status" {
+			game_state.CommandStatus()
+		} else if input[0] == "help" {
+			gamelogic.PrintClientHelp()
+		} else if input[0] == "spam" {
+			fmt.Println("Spamming not allowed yet.")
+		} else if input[0] == "quit" {
+			gamelogic.PrintQuit()
+			fmt.Println("\nClosing Peril client.")
+			os.Exit(0)
+		} else {
+			fmt.Println("Unknown command.")
+		}
 	}
 }

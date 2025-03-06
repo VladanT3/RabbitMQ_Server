@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -31,6 +30,7 @@ func main() {
 	gamelogic.PrintServerHelp()
 
 	for {
+		fmt.Println()
 		input := gamelogic.GetInput()
 		if input == nil || len(input) == 0 {
 			continue
@@ -49,15 +49,12 @@ func main() {
 			}
 		} else if input[0] == "quit" {
 			fmt.Println("Quiting the game...")
-			break
+			fmt.Println("\nShutting down Peril server.")
+			os.Exit(0)
+		} else if input[0] == "help" {
+			gamelogic.PrintServerHelp()
 		} else {
 			fmt.Println("Unknown command.")
 		}
-	}
-
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, os.Interrupt)
-	if <-signalChan != nil {
-		fmt.Println("\nShutting down Peril server.")
 	}
 }
