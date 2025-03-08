@@ -19,7 +19,7 @@ func handlerPause(game_state *gamelogic.GameState) func(routing.PlayingState) pu
 	}
 }
 
-func handlerMove(game_state *gamelogic.GameState) func(move gamelogic.ArmyMove) pubsub.AckType {
+func handlerMove(game_state *gamelogic.GameState, channel *amqp.Channel) func(move gamelogic.ArmyMove) pubsub.AckType {
 	return func(move gamelogic.ArmyMove) pubsub.AckType {
 		defer fmt.Print("> ")
 		outcome := game_state.HandleMove(move)
@@ -27,10 +27,36 @@ func handlerMove(game_state *gamelogic.GameState) func(move gamelogic.ArmyMove) 
 		case gamelogic.MoveOutComeSafe:
 			return pubsub.Ack
 		case gamelogic.MoveOutcomeMakeWar:
+			err := pubsub.PublishJSON(channel, routing.ExchangePerilTopic, routing.WarRecognitionsPrefix+"."+move.Player.Username, gamelogic.RecognitionOfWar{Attacker: move.Player, Defender: game_state.Player})
+			if err != nil {
+				log.Fatal("Couldn't publish 'war' message: ", err)
+			}
 			return pubsub.Ack
 		case gamelogic.MoveOutcomeSamePlayer:
 			return pubsub.NackDiscard
 		default:
+			return pubsub.NackDiscard
+		}
+	}
+}
+
+func handlerWar(game_state *gamelogic.GameState) func(rw gamelogic.RecognitionOfWar) pubsub.AckType {
+	return func(rw gamelogic.RecognitionOfWar) pubsub.AckType {
+		defer fmt.Print("> ")
+		outcome, _, _ := game_state.HandleWar(rw)
+		switch outcome {
+		case gamelogic.WarOutcomeNotInvolved:
+			return pubsub.NackRequeue
+		case gamelogic.WarOutcomeNoUnits:
+			return pubsub.NackDiscard
+		case gamelogic.WarOutcomeOpponentWon:
+			return pubsub.Ack
+		case gamelogic.WarOutcomeYouWon:
+			return pubsub.Ack
+		case gamelogic.WarOutcomeDraw:
+			return pubsub.Ack
+		default:
+			fmt.Println("Unknown outcome.")
 			return pubsub.NackDiscard
 		}
 	}
@@ -47,12 +73,17 @@ func main() {
 	defer conn.Close()
 	fmt.Println("Connection to RabbitMQ server successful.")
 
+	channel, err := conn.Channel()
+	if err != nil {
+		log.Fatal("Couldn't open channel: ", err)
+	}
+
 	username, err := gamelogic.ClientWelcome()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	channel, _, err := pubsub.DeclareAndBind(conn, "peril_direct", routing.PauseKey+"."+username, routing.PauseKey, 1)
+	_, _, err = pubsub.DeclareAndBind(conn, "peril_direct", routing.PauseKey+"."+username, routing.PauseKey, 1)
 	if err != nil {
 		log.Fatal("Couldn't declare and bind queue: ", err)
 	}
@@ -61,12 +92,17 @@ func main() {
 
 	err = pubsub.SubscribeJSON(conn, string(routing.ExchangePerilDirect), string(routing.PauseKey)+"."+username, string(routing.PauseKey), 1, handlerPause(game_state))
 	if err != nil {
-		log.Fatal("Couldn't subscribe to 'pause.*' messages: ", err)
+		log.Fatal("Couldn't subscribe to 'pause.*' queue: ", err)
 	}
 
-	err = pubsub.SubscribeJSON(conn, string(routing.ExchangePerilTopic), string(routing.ArmyMovesPrefix)+"."+username, string(routing.ArmyMovesPrefix)+".*", 1, handlerMove(game_state))
+	err = pubsub.SubscribeJSON(conn, string(routing.ExchangePerilTopic), string(routing.ArmyMovesPrefix)+"."+username, string(routing.ArmyMovesPrefix)+".*", 1, handlerMove(game_state, channel))
 	if err != nil {
-		log.Fatal("Couldn't subscribe to 'army_moves.*' messages: ", err)
+		log.Fatal("Couldn't subscribe to 'army_moves.*' queue: ", err)
+	}
+
+	err = pubsub.SubscribeJSON(conn, string(routing.ExchangePerilTopic), string(routing.WarRecognitionsPrefix), string(routing.WarRecognitionsPrefix)+".*", 0, handlerWar(game_state))
+	if err != nil {
+		log.Fatal("Couldn't subscribe to 'war' queue: ", err)
 	}
 
 	for {

@@ -3,7 +3,6 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -83,15 +82,12 @@ func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string
 			ack_type := handler(msg)
 			switch ack_type {
 			case Ack:
-				fmt.Println("Message was acknowledged.")
 				err = delivery.Ack(false)
 				break
 			case NackRequeue:
-				fmt.Println("Message was not acknowledged it will be requeued.")
 				err = delivery.Nack(false, true)
 				break
 			case NackDiscard:
-				fmt.Println("Message was not acknowledged it will not be requeued.")
 				err = delivery.Nack(false, false)
 				break
 			}
