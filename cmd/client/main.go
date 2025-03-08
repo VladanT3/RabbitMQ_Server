@@ -18,6 +18,13 @@ func handlerPause(game_state *gamelogic.GameState) func(routing.PlayingState) {
 	}
 }
 
+func handlerMove(game_state *gamelogic.GameState) func(move gamelogic.ArmyMove) {
+	return func(move gamelogic.ArmyMove) {
+		defer fmt.Print("> ")
+		game_state.HandleMove(move)
+	}
+}
+
 func main() {
 	fmt.Println("Starting Peril client...")
 
@@ -34,7 +41,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	_, _, err = pubsub.DeclareAndBind(conn, "peril_direct", routing.PauseKey+"."+username, routing.PauseKey, 1)
+	channel, _, err := pubsub.DeclareAndBind(conn, "peril_direct", routing.PauseKey+"."+username, routing.PauseKey, 1)
 	if err != nil {
 		log.Fatal("Couldn't declare and bind queue: ", err)
 	}
@@ -43,7 +50,12 @@ func main() {
 
 	err = pubsub.SubscribeJSON(conn, string(routing.ExchangePerilDirect), string(routing.PauseKey)+"."+username, string(routing.PauseKey), 1, handlerPause(game_state))
 	if err != nil {
-		log.Fatal("Couldn't consume messages: ", err)
+		log.Fatal("Couldn't subscribe to 'pause.*' messages: ", err)
+	}
+
+	err = pubsub.SubscribeJSON(conn, string(routing.ExchangePerilTopic), string(routing.ArmyMovesPrefix)+"."+username, string(routing.ArmyMovesPrefix)+".*", 1, handlerMove(game_state))
+	if err != nil {
+		log.Fatal("Couldn't subscribe to 'army_moves.*' messages: ", err)
 	}
 
 	for {
@@ -58,10 +70,16 @@ func main() {
 				fmt.Println(err)
 			}
 		} else if input[0] == "move" {
-			_, err := game_state.CommandMove(input)
+			move, err := game_state.CommandMove(input)
 			if err != nil {
 				fmt.Println(err)
 			}
+
+			err = pubsub.PublishJSON(channel, string(routing.ExchangePerilTopic), string(routing.ArmyMovesPrefix)+"."+username, move)
+			if err != nil {
+				log.Fatal("Couldn't publish 'move' message: ", err)
+			}
+			fmt.Println("Move published successfully.")
 		} else if input[0] == "status" {
 			game_state.CommandStatus()
 		} else if input[0] == "help" {
