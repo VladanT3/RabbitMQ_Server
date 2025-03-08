@@ -3,9 +3,18 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+)
+
+type AckType int
+
+const (
+	Ack AckType = iota
+	NackRequeue
+	NackDiscard
 )
 
 func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
@@ -39,7 +48,7 @@ func DeclareAndBind(conn *amqp.Connection, exchange, queueName, key string, simp
 		exclusive = true
 	}
 
-	queue, err := channel.QueueDeclare(queueName, durable, autoDelete, exclusive, false, nil)
+	queue, err := channel.QueueDeclare(queueName, durable, autoDelete, exclusive, false, amqp.Table{"x-dead-letter-exchange": "peril_dlx"})
 	if err != nil {
 		return nil, amqp.Queue{}, err
 	}
@@ -52,7 +61,7 @@ func DeclareAndBind(conn *amqp.Connection, exchange, queueName, key string, simp
 	return channel, queue, nil
 }
 
-func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string, simpleQueueType int, handler func(T)) error {
+func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string, simpleQueueType int, handler func(T) AckType) error {
 	channel, _, err := DeclareAndBind(conn, exchange, queueName, key, simpleQueueType)
 	if err != nil {
 		return err
@@ -71,8 +80,21 @@ func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string
 				log.Fatal("Error unmarshaling message: ", err)
 			}
 
-			handler(msg)
-			err = delivery.Ack(false)
+			ack_type := handler(msg)
+			switch ack_type {
+			case Ack:
+				fmt.Println("Message was acknowledged.")
+				err = delivery.Ack(false)
+				break
+			case NackRequeue:
+				fmt.Println("Message was not acknowledged it will be requeued.")
+				err = delivery.Nack(false, true)
+				break
+			case NackDiscard:
+				fmt.Println("Message was not acknowledged it will not be requeued.")
+				err = delivery.Nack(false, false)
+				break
+			}
 			if err != nil {
 				log.Fatal("Error acknowledging message: ", err)
 			}
