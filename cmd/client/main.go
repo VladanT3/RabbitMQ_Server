@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
@@ -155,7 +156,30 @@ func main() {
 		} else if input[0] == "help" {
 			gamelogic.PrintClientHelp()
 		} else if input[0] == "spam" {
-			fmt.Println("Spamming not allowed yet.")
+			if len(input) < 2 {
+				fmt.Println("Not enough arguments. Please provide a number alongside the command.")
+			}
+
+			num, err := strconv.Atoi(input[1])
+			if err != nil {
+				fmt.Println("Error converting argument to a number: ", err)
+				continue
+			}
+
+			for num > 0 {
+				mal_log := gamelogic.GetMaliciousLog()
+				game_log := routing.GameLog{
+					Username:    username,
+					Message:     mal_log,
+					CurrentTime: time.Now(),
+				}
+				err := pubsub.PublishGob(channel, string(routing.ExchangePerilTopic), string(routing.GameLogSlug)+"."+username, game_log)
+				if err != nil {
+					fmt.Println("Error publishing spam log: ", err)
+					break
+				}
+				num--
+			}
 		} else if input[0] == "quit" {
 			gamelogic.PrintQuit()
 			fmt.Println("\nClosing Peril client.")
