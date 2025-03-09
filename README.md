@@ -17,12 +17,10 @@ The server handles things like pausing and resuming the game, or reading game lo
 
 Clients can play the game and have acces to commands:
 - spawn:
-
     Possible units to spawn are:
     - infantry
     - cavalry
     - artillert
-
     Possible locations where units can be spawned:
     - europe
     - asia
@@ -30,7 +28,6 @@ Clients can play the game and have acces to commands:
     - antarctica
     - africa
     - australia
-
 - move - Clients can move their units around the map by specifying the location and unit ID.
 - status - Returns data on which units you have available and where.
 - spam - A command used to spam the server with game logs. It's really just a testing feature.
@@ -38,13 +35,13 @@ Clients can play the game and have acces to commands:
 
 ## Structure
 
-cmd/ - contains the code for the server and clients
+cmd/ - contains the code for the server and clients.
 
-internal/gamelogic/ - prewritten game logic
+internal/gamelogic/ - prewritten game logic.
 
-internal/pubsub/ - everything RabbitMQ related besides connecting to it (that's in the server and client)
+internal/pubsub/ - everything RabbitMQ related besides connecting to it (that's in the server and client).
 
-internal/routing/ - routing constants for exchange and queue names and keys
+internal/routing/ - routing constants for exchange and queue names and keys.
 
 ## Running the 'Creature' (project)
 
@@ -67,4 +64,4 @@ No I didn't build binaries, I don't care this was faster when constantly testing
 ```
 ./multiserver.sh [n]
 ```
-Runs 'n' RabbitMQ servers. Used when testing backpressure to clear out full queues. No real reason to use it otherwise
+Runs 'n' RabbitMQ servers. Used when testing backpressure to clear out full queues. No real reason to use it otherwise.
