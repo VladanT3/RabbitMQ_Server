@@ -1,7 +1,9 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"log"
 
@@ -30,7 +32,23 @@ func PublishJSON[T any](ch *amqp.Channel, exchange, key string, val T) error {
 	return nil
 }
 
-func DeclareAndBind(conn *amqp.Connection, exchange, queueName, key string, simpleQueueType int) (*amqp.Channel, amqp.Queue, error) {
+func PublishGob[T any](ch *amqp.Channel, exchange, key string, val T) error {
+	var buff bytes.Buffer
+	encoder := gob.NewEncoder(&buff)
+	err := encoder.Encode(val)
+	if err != nil {
+		return err
+	}
+
+	err = ch.PublishWithContext(context.Background(), exchange, key, false, false, amqp.Publishing{ContentType: "application/gob", Body: buff.Bytes()})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func DeclareAndBindQueue(conn *amqp.Connection, exchange, queueName, key string, simpleQueueType int) (*amqp.Channel, amqp.Queue, error) {
 	channel, err := conn.Channel()
 	if err != nil {
 		return nil, amqp.Queue{}, err
@@ -60,8 +78,17 @@ func DeclareAndBind(conn *amqp.Connection, exchange, queueName, key string, simp
 	return channel, queue, nil
 }
 
+func DeclareExchange(channel *amqp.Channel, name, kind string) error {
+	err := channel.ExchangeDeclare(name, kind, true, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string, simpleQueueType int, handler func(T) AckType) error {
-	channel, _, err := DeclareAndBind(conn, exchange, queueName, key, simpleQueueType)
+	channel, _, err := DeclareAndBindQueue(conn, exchange, queueName, key, simpleQueueType)
 	if err != nil {
 		return err
 	}

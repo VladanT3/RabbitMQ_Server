@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/gamelogic"
 	"github.com/bootdotdev/learn-pub-sub-starter/internal/pubsub"
@@ -40,25 +41,52 @@ func handlerMove(game_state *gamelogic.GameState, channel *amqp.Channel) func(mo
 	}
 }
 
-func handlerWar(game_state *gamelogic.GameState) func(rw gamelogic.RecognitionOfWar) pubsub.AckType {
+func handlerWar(game_state *gamelogic.GameState, channel *amqp.Channel) func(rw gamelogic.RecognitionOfWar) pubsub.AckType {
 	return func(rw gamelogic.RecognitionOfWar) pubsub.AckType {
 		defer fmt.Print("> ")
-		outcome, _, _ := game_state.HandleWar(rw)
+
+		var ack_type pubsub.AckType
+		outcome, winner, loser := game_state.HandleWar(rw)
+		message := ""
+
 		switch outcome {
 		case gamelogic.WarOutcomeNotInvolved:
-			return pubsub.NackRequeue
+			ack_type = pubsub.NackRequeue
+			break
 		case gamelogic.WarOutcomeNoUnits:
-			return pubsub.NackDiscard
+			ack_type = pubsub.NackDiscard
+			break
 		case gamelogic.WarOutcomeOpponentWon:
-			return pubsub.Ack
+			message = fmt.Sprintf("%s won a war against %s.", winner, loser)
+			ack_type = pubsub.Ack
+			break
 		case gamelogic.WarOutcomeYouWon:
-			return pubsub.Ack
+			message = fmt.Sprintf("%s won a war against %s.", winner, loser)
+			ack_type = pubsub.Ack
+			break
 		case gamelogic.WarOutcomeDraw:
-			return pubsub.Ack
+			message = fmt.Sprintf("A war between %s and %s resulted in a draw.", winner, loser)
+			ack_type = pubsub.Ack
+			break
 		default:
 			fmt.Println("Unknown outcome.")
-			return pubsub.NackDiscard
+			ack_type = pubsub.NackDiscard
+			break
 		}
+
+		if message != "" {
+			game_log := routing.GameLog{
+				Username:    rw.Attacker.Username,
+				Message:     message,
+				CurrentTime: time.Now(),
+			}
+			err := pubsub.PublishGob(channel, string(routing.ExchangePerilTopic), string(routing.GameLogSlug)+"."+rw.Attacker.Username, game_log)
+			if err != nil {
+				ack_type = pubsub.NackRequeue
+			}
+		}
+
+		return ack_type
 	}
 }
 
@@ -83,11 +111,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	_, _, err = pubsub.DeclareAndBind(conn, "peril_direct", routing.PauseKey+"."+username, routing.PauseKey, 1)
-	if err != nil {
-		log.Fatal("Couldn't declare and bind queue: ", err)
-	}
-
 	game_state := gamelogic.NewGameState(username)
 
 	err = pubsub.SubscribeJSON(conn, string(routing.ExchangePerilDirect), string(routing.PauseKey)+"."+username, string(routing.PauseKey), 1, handlerPause(game_state))
@@ -100,7 +123,7 @@ func main() {
 		log.Fatal("Couldn't subscribe to 'army_moves.*' queue: ", err)
 	}
 
-	err = pubsub.SubscribeJSON(conn, string(routing.ExchangePerilTopic), string(routing.WarRecognitionsPrefix), string(routing.WarRecognitionsPrefix)+".*", 0, handlerWar(game_state))
+	err = pubsub.SubscribeJSON(conn, string(routing.ExchangePerilTopic), string(routing.WarRecognitionsPrefix), string(routing.WarRecognitionsPrefix)+".*", 0, handlerWar(game_state, channel))
 	if err != nil {
 		log.Fatal("Couldn't subscribe to 'war' queue: ", err)
 	}

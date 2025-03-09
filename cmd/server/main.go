@@ -27,9 +27,26 @@ func main() {
 		log.Fatal("Couldn't create channel: ", err)
 	}
 
-	_, _, err = pubsub.DeclareAndBind(conn, routing.ExchangePerilTopic, routing.GameLogSlug, routing.GameLogSlug+".*", 0)
+	err = pubsub.DeclareExchange(channel, "peril_direct", "direct")
 	if err != nil {
-		log.Fatal("Couldn't declare and bind queue: ", err)
+		log.Fatal("Error declaring 'peril_direct' exchange:", err)
+	}
+	err = pubsub.DeclareExchange(channel, "peril_topic", "topic")
+	if err != nil {
+		log.Fatal("Error declaring 'peril_topic' exchange:", err)
+	}
+	err = pubsub.DeclareExchange(channel, "peril_dlx", "fanout")
+	if err != nil {
+		log.Fatal("Error declaring 'peril_dlx' exchange:", err)
+	}
+
+	_, _, err = pubsub.DeclareAndBindQueue(conn, "peril_dlx", "peril_dlq", "", 0)
+	if err != nil {
+		log.Fatal("Error declaring and binding 'peril_dlq' queue:", err)
+	}
+	_, _, err = pubsub.DeclareAndBindQueue(conn, routing.ExchangePerilTopic, routing.GameLogSlug, routing.GameLogSlug+".*", 0)
+	if err != nil {
+		log.Fatal("Error declaring and binding 'game_logs' queue: ", err)
 	}
 
 	gamelogic.PrintServerHelp()
