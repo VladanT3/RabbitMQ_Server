@@ -126,3 +126,45 @@ func SubscribeJSON[T any](conn *amqp.Connection, exchange, queueName, key string
 
 	return nil
 }
+
+func SubscribeGob[T any](conn *amqp.Connection, exchange, queueName, key string, simpleQueueType int, handler func(T) AckType) error {
+	channel, _, err := DeclareAndBindQueue(conn, exchange, queueName, key, simpleQueueType)
+	if err != nil {
+		return err
+	}
+
+	deliveries, err := channel.Consume(queueName, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for delivery := range deliveries {
+			var msg T
+			buff := bytes.NewBuffer(delivery.Body)
+			decoder := gob.NewDecoder(buff)
+			err := decoder.Decode(&msg)
+			if err != nil {
+				log.Fatal("Error decoding message: ", err)
+			}
+
+			ack_type := handler(msg)
+			switch ack_type {
+			case Ack:
+				err = delivery.Ack(false)
+				break
+			case NackRequeue:
+				err = delivery.Nack(false, true)
+				break
+			case NackDiscard:
+				err = delivery.Nack(false, false)
+				break
+			}
+			if err != nil {
+				log.Fatal("Error acknowledging message: ", err)
+			}
+		}
+	}()
+
+	return nil
+}
