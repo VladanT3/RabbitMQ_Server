@@ -17,10 +17,12 @@ The server handles things like pausing and resuming the game, or reading game lo
 
 Clients can play the game and have acces to commands:
 - spawn:
+
     Possible units to spawn are:
     - infantry
     - cavalry
     - artillert
+
     Possible locations where units can be spawned:
     - europe
     - asia
