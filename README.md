@@ -1,4 +1,4 @@
-# Pub-Sub server for a 'Risk-like' game called 'Peril'
+# Pub/Sub server for a 'Risk-like' game called 'Peril'
 
 The code for game logic is prewritten. I wrote the backend logic that uses RabbitMQ to transfer messages between servers and clients.
 
